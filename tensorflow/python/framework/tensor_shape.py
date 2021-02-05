@@ -118,7 +118,7 @@ def dimension_value(dimension):
   value = tensor_shape[i]  # Warning: this will return the dim value in V2!
   ```
 
-  Arguments:
+  Args:
     dimension: Either a `Dimension` instance, an integer, or None.
 
   Returns:
@@ -164,7 +164,7 @@ def dimension_at_index(shape, index):
   # instantiated on the fly.
   ```
 
-  Arguments:
+  Args:
     shape: A TensorShape instance.
     index: An integer index.
 
@@ -234,6 +234,10 @@ class Dimension(object):
       return None
     return self._value != other.value
 
+  def __bool__(self):
+    """Equivalent to `bool(self.value)`."""
+    return bool(self._value)
+
   def __int__(self):
     return self._value
 
@@ -245,6 +249,11 @@ class Dimension(object):
   def __index__(self):
     # Allow use in Python 3 range
     return self._value
+
+  def __hash__(self):
+    if self._value is None:
+      raise ValueError("Unable to hash Dimension with value 'None'")
+    return hash(self._value)
 
   @property
   def value(self):
@@ -981,6 +990,11 @@ class TensorShape(object):
     if not isinstance(other, TensorShape):
       other = TensorShape(other)
     return other.concatenate(self)
+
+  def __hash__(self):
+    if not self.is_fully_defined():
+      raise ValueError("Unable to hash partially defined TensorShape.")
+    return hash(tuple(self._dims))
 
   def concatenate(self, other):
     """Returns the concatenation of the dimension in `self` and `other`.

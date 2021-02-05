@@ -16,6 +16,20 @@ func @tfAssertFalse(%arg0: tensor<1x1x6x2xf32>) {
   return
 }
 
+// CHECK-LABEL: testBatchMatMulToV2
+func @testBatchMatMulToV2(%arg0: tensor<2x3x5xf32>, %arg1: tensor<2x5x7xf32>) -> tensor<2x3x7xf32> {
+  // CHECK: tf.BatchMatMulV2
+  %0 = "tf.BatchMatMul"(%arg0, %arg1) {adj_x = false, adj_y = false} : (tensor<2x3x5xf32>, tensor<2x5x7xf32>) -> tensor<2x3x7xf32>
+  return %0: tensor<2x3x7xf32>
+}
+
+// CHECK-LABEL: testDynamicBatchMatMulToV2
+func @testDynamicBatchMatMulToV2(%arg0: tensor<2x3x5xf32>, %arg1: tensor<?x5x7xf32>) -> tensor<2x3x7xf32> {
+  // CHECK: tf.BatchMatMul
+  %0 = "tf.BatchMatMul"(%arg0, %arg1) {adj_x = false, adj_y = false} : (tensor<2x3x5xf32>, tensor<?x5x7xf32>) -> tensor<2x3x7xf32>
+  return %0: tensor<2x3x7xf32>
+}
+
 // CHECK-LABEL: testBatchMatMulToMatMul
 func @testBatchMatMulToMatMul(%arg0: tensor<2x3xf32>, %arg1: tensor<3x2xf32>) -> tensor<2x2xf32> {
   %0 = "tf.BatchMatMul"(%arg0, %arg1) {adj_x = false, adj_y = false} : (tensor<2x3xf32>, tensor<3x2xf32>) -> tensor<2x2xf32>
@@ -163,19 +177,26 @@ func @testConcatCwiseBinaryOnInnerDim(%arg0: tensor<?x1xf32>,
   // CHECK: %[[LHS_AXIS:.*]] = "tf.Const"() {value = dense<1> : tensor<i64>}
   // CHECK: %[[RHS_AXIS:.*]] = "tf.Const"() {value = dense<0> : tensor<i64>}
 
-  // CHECK: %[[LHS_CONCAT:.*]] = "tf.ConcatV2"(%arg0, %arg1, %[[LHS_AXIS]])
-  // CHECK: %[[RHS_CONCAT:.*]] = "tf.ConcatV2"(%arg2, %arg3, %[[RHS_AXIS]])
+  // CHECK: %[[ADD_LHS_CONCAT:.*]] = "tf.ConcatV2"(%arg2, %arg3, %[[RHS_AXIS]])
+  // CHECK: %[[MUL_LHS_CONCAT:.*]] = "tf.ConcatV2"(%arg0, %arg1, %[[LHS_AXIS]])
+  // CHECK: %[[MUL_RHS_CONCAT:.*]] = "tf.ConcatV2"(%arg2, %arg3, %[[RHS_AXIS]])
 
-  // CHECK: %[[MUL:.*]] = "tf.Mul"(%[[LHS_CONCAT]], %[[RHS_CONCAT]])
+  // CHECK: %[[MUL:.*]] = "tf.Mul"(%[[MUL_LHS_CONCAT]], %[[MUL_RHS_CONCAT]])
   // CHECK-SAME: (tensor<?x2xf32>, tensor<2xf32>) -> tensor<?x2xf32>
-  // CHECK: return %[[MUL]]
+  // CHECK: %[[ADD:.*]] = "tf.AddV2"(%[[ADD_LHS_CONCAT]], %[[MUL]])
+  // CHECK-SAME: (tensor<2xf32>, tensor<?x2xf32>) -> tensor<?x2xf32>
+  // CHECK: return %[[ADD]]
 
   %0 = "tf.Const"() { value = dense<1> : tensor<i32> } : () -> tensor<i32>
+  // Mul of a tensor and a scalar const.
   %1 = "tf.Mul"(%arg0, %arg2) : (tensor<?x1xf32>, tensor<f32>) -> tensor<?x1xf32>
   %2 = "tf.Mul"(%arg1, %arg3) : (tensor<?x1xf32>, tensor<f32>) -> tensor<?x1xf32>
-  %3 = "tf.ConcatV2"(%1, %2, %0) : (tensor<?x1xf32>, tensor<?x1xf32>, tensor<i32>) -> tensor<?x2xf32>
+  // Add of a scalar const and a tensor.
+  %3 = "tf.AddV2"(%arg2, %1) : (tensor<f32>, tensor<?x1xf32>) -> tensor<?x1xf32>
+  %4 = "tf.AddV2"(%arg3, %2) : (tensor<f32>, tensor<?x1xf32>) -> tensor<?x1xf32>
+  %5 = "tf.ConcatV2"(%3, %4, %0) : (tensor<?x1xf32>, tensor<?x1xf32>, tensor<i32>) -> tensor<?x2xf32>
 
-  return %3 : tensor<?x2xf32>
+  return %5 : tensor<?x2xf32>
 }
 
 // CHECK-LABEL: testConcatCwiseBinaryInvalidInnerDim
@@ -191,6 +212,18 @@ func @testConcatCwiseBinaryInvalidInnerDim(%arg0: tensor<?x2xf32>,
   %3 = "tf.ConcatV2"(%1, %2, %0) : (tensor<?x2xf32>, tensor<?x2xf32>, tensor<i32>) -> tensor<?x4xf32>
 
   return %3 : tensor<?x4xf32>
+}
+
+// CHECK-LABEL: testConcatCwiseBinaryNegativeAxis
+func @testConcatCwiseBinaryNegativeAxis(%arg0: tensor<f32>,
+  %arg1: tensor<f32>, %arg2: tensor<f32>, %arg3: tensor<f32>) -> tensor<2xf32> {
+  // The test should not crash with negative axis.
+  %0 = "tf.Const"() { value = dense<-1> : tensor<i32> } : () -> tensor<i32>
+  %1 = "tf.Mul"(%arg0, %arg2) : (tensor<f32>, tensor<f32>) -> tensor<f32>
+  %2 = "tf.Mul"(%arg1, %arg3) : (tensor<f32>, tensor<f32>) -> tensor<f32>
+  %3 = "tf.ConcatV2"(%1, %2, %0) : (tensor<f32>, tensor<f32>, tensor<i32>) -> tensor<2xf32>
+
+  return %3 : tensor<2xf32>
 }
 
 // CHECK-LABEL: testLogOfSoftmax
@@ -890,6 +923,20 @@ func @testRankOfRankedTensor(%arg0 : tensor<4x3x2xf32>) -> tensor<i32> {
   return %0 : tensor<i32>
 }
 
+// CHECK-LABEL: testRankOfRankedTensorUnrankedOutput
+func @testRankOfRankedTensorUnrankedOutput(%arg0 : tensor<4x3x2xf32>) -> tensor<*xi32> {
+  // Regression test to make sure we don't crash in this case.
+  %0 = "tf.Rank"(%arg0) : (tensor<4x3x2xf32>) -> tensor<*xi32>
+  return %0 : tensor<*xi32>
+}
+
+// CHECK-LABEL: testRankOfRankedTensorDynamicShapeOutput
+func @testRankOfRankedTensorDynamicShapeOutput(%arg0 : tensor<4x3x2xf32>) -> tensor<?xi32> {
+  // Regression test to make sure we don't crash in this case.
+  %0 = "tf.Rank"(%arg0) : (tensor<4x3x2xf32>) -> tensor<?xi32>
+  return %0 : tensor<?xi32>
+}
+
 // CHECK-LABEL: @foldFill
 func @foldFill() -> (tensor<3x2x1xf32>, tensor<*xf32>, tensor<*xcomplex<f32>>) {
   %0 = "tf.Const"() {value = dense<[3, 2, 1]> : tensor<3xi32>} : () -> tensor<3xi32>
@@ -1301,3 +1348,28 @@ func @testMatrixSetDiagV2(%arg0: tensor<3x3xi64>, %arg1: tensor<3xi64>, %arg2: t
   // CHECK-SAME: {align = "LEFT_LEFT"}
 }
 
+// CHECK-LABEL: @testVariableToVariableV2
+func @testVariableToVariableV2() {
+  // CHECK-NOT: "tf.Variable"
+
+  %0 = "tf.Const"() { value = dense<1> : tensor<i32> } : () -> tensor<i32>
+  // CHECK: "tf.VariableV2"
+  %1 = "tf.Variable"() {container = "", dtype = i32, shared_name = "var", shape = #tf.shape<>} : () -> tensor<!tf.int32ref>
+  %2 = "tf.Assign"(%1, %0) : (tensor<!tf.int32ref>, tensor<i32>) -> (tensor<!tf.int32ref>)
+
+  return
+}
+
+// CHECK-LABEL: testUnpackAndCwiseUnary
+func @testUnpackAndCwiseUnary(%arg0: tensor<?x2xf32>) -> (tensor<?xf32>, tensor<?xf32>) {
+
+  // CHECK: %[[NEG:.*]] = "tf.Neg"(%arg0)
+  // CHECK: %[[UNPACK:.*]]:2 = "tf.Unpack"(%[[NEG]])
+  %unpacked:2 = "tf.Unpack"(%arg0) {axis = 1 : i64, device = ""}
+                : (tensor<?x2xf32>) -> (tensor<?xf32>, tensor<?xf32>)
+  %0 = "tf.Neg"(%unpacked#0): (tensor<?xf32>) -> tensor<?xf32>
+  %1 = "tf.Neg"(%unpacked#1): (tensor<?xf32>) -> tensor<?xf32>
+
+  // CHECK: return %[[UNPACK]]#0, %[[UNPACK]]#1
+  return %0, %1 : tensor<?xf32>, tensor<?xf32>
+}

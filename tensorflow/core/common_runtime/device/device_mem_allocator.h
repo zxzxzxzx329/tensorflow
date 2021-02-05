@@ -41,8 +41,10 @@ class DeviceMemAllocator : public SubAllocator {
   }
   ~DeviceMemAllocator() override {}
 
-  void* Alloc(size_t alignment, size_t num_bytes) override {
+  void* Alloc(size_t alignment, size_t num_bytes,
+              size_t* bytes_received) override {
     void* ptr = nullptr;
+    *bytes_received = num_bytes;
     if (num_bytes > 0) {
       if (use_unified_memory_) {
         ptr = stream_exec_->UnifiedMemoryAllocate(num_bytes);
@@ -65,6 +67,8 @@ class DeviceMemAllocator : public SubAllocator {
       }
     }
   }
+
+  bool SupportsCoalescing() const override { return false; }
 
  private:
   se::StreamExecutor* stream_exec_;  // not owned, non-null

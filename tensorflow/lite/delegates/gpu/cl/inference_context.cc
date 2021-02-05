@@ -27,17 +27,17 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 #include "tensorflow/lite/delegates/gpu/cl/buffer.h"
 #include "tensorflow/lite/delegates/gpu/cl/cl_device.h"
-#include "tensorflow/lite/delegates/gpu/cl/kernels/gpu_operation.h"
-#include "tensorflow/lite/delegates/gpu/cl/selectors/operation_selector.h"
-#include "tensorflow/lite/delegates/gpu/cl/selectors/special_selector.h"
-#include "tensorflow/lite/delegates/gpu/cl/storage_type_util.h"
 #include "tensorflow/lite/delegates/gpu/common/data_type.h"
 #include "tensorflow/lite/delegates/gpu/common/memory_management.h"
 #include "tensorflow/lite/delegates/gpu/common/model.h"
 #include "tensorflow/lite/delegates/gpu/common/model_transformer.h"
 #include "tensorflow/lite/delegates/gpu/common/operations.h"
 #include "tensorflow/lite/delegates/gpu/common/precision.h"
+#include "tensorflow/lite/delegates/gpu/common/selectors/operation_selector.h"
+#include "tensorflow/lite/delegates/gpu/common/selectors/special_selector.h"
 #include "tensorflow/lite/delegates/gpu/common/shape.h"
+#include "tensorflow/lite/delegates/gpu/common/task/gpu_operation.h"
+#include "tensorflow/lite/delegates/gpu/common/task/storage_type_util.h"
 #include "tensorflow/lite/delegates/gpu/common/task/tensor_desc.h"
 #include "tensorflow/lite/delegates/gpu/common/transformations/add_bias.h"
 #include "tensorflow/lite/delegates/gpu/common/transformations/global_pooling_to_reduce_op.h"
@@ -135,22 +135,6 @@ bool IsGenericAdd(const Node& node, const std::vector<Value*>& inputs,
 
 }  // namespace
 
-CLNode::CLNode(CLNode&& node)
-    : cl_operation(std::move(node.cl_operation)),
-      inputs(std::move(node.inputs)),
-      outputs(std::move(node.outputs)),
-      name(std::move(node.name)) {}
-
-CLNode& CLNode::operator=(CLNode&& node) {
-  if (this != &node) {
-    cl_operation = std::move(node.cl_operation);
-    inputs = std::move(node.inputs);
-    outputs = std::move(node.outputs);
-    name = std::move(node.name);
-  }
-  return *this;
-}
-
 absl::Status InferenceContext::InitFromGraph(
     const CreateInferenceInfo& create_info, const GraphFloat32& graph,
     Environment* env, std::vector<uint8_t>* serialized_model) {
@@ -163,14 +147,14 @@ absl::Status InferenceContext::InitFromGraph(
   ReserveGraphTensors(create_info, creation_context.GetGpuInfo(), graph);
   precision_ = create_info.precision;
   storage_type_ = create_info.storage_type;
-  if (env->device().IsMali()) {
+  if (env->device().GetInfo().IsMali()) {
     need_flush_ = true;
     need_manual_release_ = true;
 
     flush_periodically_ = true;
     flush_period_ = 24;
   }
-  if (env->device().IsPowerVR()) {
+  if (env->device().GetInfo().IsPowerVR()) {
     need_flush_ = true;
   }
   CopyInAndOutIds(graph);
@@ -326,7 +310,7 @@ absl::Status InferenceContext::ConvertOperations(const GpuInfo& gpu_info,
       continue;
     }
     auto op_type = OperationTypeFromString(node.operation.type);
-    if (op_type == OperationType::CONST) {
+    if (op_type == OperationType::CONSTANT) {
       auto attr =
           absl::any_cast<ConstTensorAttributes>(node.operation.attributes);
       auto outputs = graph.FindOutputs(node.id);

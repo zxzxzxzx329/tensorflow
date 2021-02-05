@@ -36,8 +36,10 @@ class DeviceHostAllocator : public SubAllocator {
   }
   ~DeviceHostAllocator() override {}
 
-  void* Alloc(size_t alignment, size_t num_bytes) override {
+  void* Alloc(size_t alignment, size_t num_bytes,
+              size_t* bytes_received) override {
     void* ptr = nullptr;
+    *bytes_received = num_bytes;
     if (num_bytes > 0) {
       ptr = stream_exec_->HostMemoryAllocate(num_bytes);
       if (ptr == nullptr) {
@@ -56,6 +58,8 @@ class DeviceHostAllocator : public SubAllocator {
       stream_exec_->HostMemoryDeallocate(ptr);
     }
   }
+
+  bool SupportsCoalescing() const override { return false; }
 
  private:
   se::StreamExecutor* stream_exec_;  // not owned, non-null

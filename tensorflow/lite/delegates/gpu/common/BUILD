@@ -40,6 +40,7 @@ cc_library(
     srcs = ["gpu_info.cc"],
     hdrs = ["gpu_info.h"],
     deps = [
+        ":data_type",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -149,6 +150,7 @@ cc_library(
         ":model_builder_helper",
         ":model_transformer",
         ":object_reader",
+        ":operation_parser",
         ":operations",
         ":shape",
         ":status",
@@ -160,6 +162,7 @@ cc_library(
         "//tensorflow/lite/delegates:utils",
         "//tensorflow/lite:kernel_api",
         "//tensorflow/lite:util",
+        "//tensorflow/lite/core/api",
         "//tensorflow/lite/c:common",
         "//tensorflow/lite/delegates/gpu/common/transformations:model_transformations",
         "//tensorflow/lite/kernels:kernel_util",
@@ -368,6 +371,22 @@ cc_test(
     deps = [
         ":memory_management",
         "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "operation_parser",
+    srcs = ["operation_parser.cc"],
+    hdrs = ["operation_parser.h"],
+    deps = [
+        ":model",
+        ":object_reader",
+        ":operations",
+        ":shape",
+        ":status",
+        "//tensorflow/lite/c:common",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/strings",
     ],
 )
 

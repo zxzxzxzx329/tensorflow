@@ -46,6 +46,12 @@ struct SpmdPartitionerOptions {
   // windowed implementation in an HLO loop.
   int64 threshold_for_windowed_einsum_mib = 256;
 
+  // Whether unroll windowed einsum loop by degree of two.
+  bool unroll_windowed_einsum = false;
+
+  // Whether doing bidirectional collective permute in windowed einsum loop.
+  bool bidirectional_windowed_einsum = false;
+
   // Whether the entry computations' signature could change after partitioning.
   bool allow_module_signature_change = false;
 
@@ -338,6 +344,10 @@ class PartitionedHlo {
   absl::optional<PartitionedHlo> ReshardFromPartialReplicateWithDynamicSlice(
       const HloSharding& target);
 
+  // Helper function to reshard from partial replicate using AllToAll.
+  absl::optional<PartitionedHlo> ReshardPartialReplicateWithAllToAll(
+      const HloSharding& target);
+
   // SPMD instruction.
   HloInstruction* hlo_;
 
@@ -464,7 +474,8 @@ class SpmdPartitioningVisitor : public DfsHloVisitorWithDefault {
   SpmdBuilder* builder() { return &b_; }
 
   StatusOr<bool> DoPartition(HloComputation* computation,
-                             const HloSharding& root_sharding);
+                             const HloSharding& root_sharding,
+                             const SpmdPartitionerOptions& options);
 
   // Information about a loop created for windowed dot-general. Used when
   // DoCodeMotionForWindowedDotGeneralLoops() executes after the visitor
@@ -484,7 +495,8 @@ class SpmdPartitioningVisitor : public DfsHloVisitorWithDefault {
   // Performs code motion for windowed dot-general loops in
   // windowed_dot_general_loops_. Invoked after the visitor finishes traversing
   // the graph.
-  Status DoCodeMotionForWindowedDotGeneralLoops(HloComputation* computation);
+  Status DoCodeMotionForWindowedDotGeneralLoops(
+      HloComputation* computation, const SpmdPartitionerOptions& options);
 
   bool changed_;
   HloModule* module_;
@@ -511,6 +523,8 @@ class SpmdPartitioningVisitor : public DfsHloVisitorWithDefault {
   SpmdLogger* logger_;
   const SpmdPartitionerOptions options_;
   SpmdPartitioner* partitioner_;
+  std::vector<HloSharding> visiting_hlo_operand_shardings_;
+  absl::optional<HloSharding> visiting_hlo_sharding_;
 };
 
 }  // namespace spmd

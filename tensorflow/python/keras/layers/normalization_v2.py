@@ -55,7 +55,7 @@ class SyncBatchNormalization(normalization.BatchNormalizationBase):
     model.add(tf.keras.layers.experimental.SyncBatchNormalization())
   ```
 
-  Arguments:
+  Args:
     axis: Integer, the axis that should be normalized
       (typically the features axis).
       For instance, after a `Conv2D` layer with
@@ -228,7 +228,7 @@ class BatchNormalization(normalization.BatchNormalizationBase):
   *after having been trained on data that has similar statistics as the
   inference data*.
 
-  Arguments:
+  Args:
     axis: Integer, the axis that should be normalized (typically the features
       axis). For instance, after a `Conv2D` layer with
       `data_format="channels_first"`, set `axis=1` in `BatchNormalization`.
@@ -257,11 +257,13 @@ class BatchNormalization(normalization.BatchNormalizationBase):
       - `training=False`: The layer will normalize its inputs using the mean and
         variance of its moving statistics, learned during training.
 
-  Input shape: Arbitrary. Use the keyword argument `input_shape` (tuple of
+  Input shape:
+    Arbitrary. Use the keyword argument `input_shape` (tuple of
     integers, does not include the samples axis) when using this layer as the
     first layer in a model.
 
-  Output shape: Same shape as input.
+  Output shape:
+    Same shape as input.
 
   Reference:
     - [Ioffe and Szegedy, 2015](https://arxiv.org/abs/1502.03167).
